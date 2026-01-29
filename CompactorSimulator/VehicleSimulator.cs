@@ -1,6 +1,7 @@
 ﻿using MQTTnet;
 using MQTTnet.Client;
 using System.Text.Json;
+using SiteSense.Shared.Models;
 
 namespace CompactorSimulator;
 

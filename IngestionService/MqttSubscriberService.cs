@@ -1,6 +1,6 @@
-using CompactorSimulator;
 using MQTTnet;
 using MQTTnet.Client;
+using SiteSense.Shared.Models;
 using System.Text.Json;
 
 namespace IngestionService;

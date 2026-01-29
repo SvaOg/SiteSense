@@ -1,4 +1,4 @@
-﻿namespace CompactorSimulator;
+﻿namespace SiteSense.Shared.Models;
 
 public class TelemetryPoint
 {

@@ -18,4 +18,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SiteSense.Shared\SiteSense.Shared.csproj" />
+  </ItemGroup>
+
 </Project>
