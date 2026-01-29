@@ -1,4 +1,5 @@
 ﻿using MQTTnet;
+using MQTTnet.Client;
 using System.Text.Json;
 
 namespace CompactorSimulator;

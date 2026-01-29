@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MQTTnet;
+using MQTTnet.Client;
 using MQTTnet.Exceptions;
 
 
@@ -26,7 +27,7 @@ internal class Program
         Console.WriteLine($"Site ID: {simulationConfig.SiteId}");
 
         // 3. Create and connect a single MqttClient using MqttFactory
-        var factory = new MqttClientFactory();
+        var factory = new MqttFactory();
         var mqttClient = factory.CreateMqttClient();
         
         var mqttOptions = new MqttClientOptionsBuilder()
