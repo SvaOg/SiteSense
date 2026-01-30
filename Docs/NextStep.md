@@ -1,14 +1,11 @@
-## Phase 3: Channel-Based Decoupling
+## Phase 4: SQL Batch Writer
 
-Add a `Channel<TelemetryPoint>` between the MQTT subscriber and a processing pipeline. This decouples "receiving fast" from "processing at your own pace" — the key to handling backpressure.
+Replace the placeholder processing logic in TelemetryProcessorService with SqlBulkCopy batch writes. The processor will accumulate messages into batches (e.g., 500 items) and bulk-insert them into SQL Server.
 
 ### Key concept
-Right now the MQTT handler deserializes and discards. In Phase 3, it will write to a Channel, and a separate BackgroundService will read from that Channel and process messages. This is the Producer-Consumer pattern using System.Threading.Channels.
+Instead of inserting one row per message (150 INSERT statements/sec), batch them up and write 500 rows at once using SqlBulkCopy. This turns hundreds of round-trips into one high-performance bulk operation.
 
 ### Why this matters
-- The MQTT callback must return quickly — if it blocks, the broker's message queue backs up
-- Database writes (Phase 4) will be slower than message arrival
-- The Channel acts as an in-memory buffer, letting the receiver stay fast while the processor works at its own pace
-- Bounded channels add backpressure — if the buffer fills, the producer slows down rather than consuming unlimited memory
-
-### See Phase 3 doc (Docs/Phase2.md or upcoming Phase3.md) for detailed steps.
+- Individual INSERTs at 150/sec will bottleneck on network round-trips and transaction overhead
+- SqlBulkCopy uses the same protocol as BCP (bulk copy program) — optimized for high-volume writes
+- Batching also lets you tune the tradeoff: bigger batches = higher throughput, but more latency before data hits the DB

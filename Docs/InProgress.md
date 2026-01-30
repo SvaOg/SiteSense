@@ -1,20 +1,15 @@
-## Phase 2: Complete
+## Phase 3: Complete
 
 All 5 steps done:
 
-  1. Created the Worker Service project (IngestionService) ✓
-  2. Built the MQTT subscriber (MqttSubscriberService as BackgroundService) ✓
-  3. Shared the TelemetryPoint model via SiteSense.Shared class library ✓
-  4. Added throughput metrics (msg/sec, total count, error tracking with Interlocked) ✓
-  5. Ran end-to-end — ingestion service keeps up with multiple vehicles ✓
+  1. Created bounded Channel<TelemetryPoint> (capacity 10,000) registered in DI ✓
+  2. Modified MqttSubscriberService to write to channel via TryWrite (non-blocking) ✓
+  3. Created TelemetryProcessorService reading from channel via await foreach ✓
+  4. Added queue depth observability (Reader.Count in metrics) ✓
+  5. Stress tested — confirmed backpressure works (drops messages when channel full, producer never blocks) ✓
 
-### Code review fixes applied
-- Renamed config class from MqttClientOptions to avoid collision with MQTTnet type
-- Added `using var` on IMqttClient for proper disposal
-- Fixed structured logging in error handler
-- Made message handler non-async (returns Task.CompletedTask)
-
-### Known limitation
-- VehicleSimulator: Windows timer resolution caps single-vehicle rate at ~64 msg/sec
-- Workaround: use multiple vehicles to reach target aggregate throughput
-- Simulator uses 100ms sleep with catch-up burst pattern (accurate aggregate rate, bursty delivery)
+### Key observations
+- Queue depth stays near ~10 under normal load (processor faster than producer)
+- With simulated slow consumer (Task.Delay), queue depth climbs to capacity
+- At capacity, TryWrite returns false and messages are dropped — producer never stalls
+- Dropped message counter tracks data loss for observability

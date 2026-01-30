@@ -4,7 +4,7 @@ using SiteSense.Shared.Models;
 using System.Text.Json;
 using System.Threading.Channels;
 
-namespace IngestionService;
+namespace IngestionService.Services;
 
 internal class MqttBrokerOptions
 {
