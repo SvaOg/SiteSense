@@ -2,6 +2,7 @@ using MQTTnet;
 using MQTTnet.Client;
 using SiteSense.Shared.Models;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace IngestionService;
 
@@ -16,16 +17,19 @@ public class MqttSubscriberService : BackgroundService
 {
     private readonly ILogger<MqttSubscriberService> _logger;
     private readonly IConfiguration _config;
+    private readonly ChannelWriter<TelemetryPoint> _writer;
     
     private long _messageCount = 0;
     private long _totalMessages = 0;
     private long _totalErrors = 0;
+    private long _droppedMessages = 0;
     private DateTime _lastTimestamp = DateTime.UtcNow;
 
-    public MqttSubscriberService(ILogger<MqttSubscriberService> logger, IConfiguration config)
+    public MqttSubscriberService(ILogger<MqttSubscriberService> logger, IConfiguration config, ChannelWriter<TelemetryPoint> writer)
     {
         _logger = logger;
         _config = config;
+        _writer = writer;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -82,12 +86,12 @@ public class MqttSubscriberService : BackgroundService
             _totalMessages += currentCount;
             long messageRate = (long)(currentCount / duration.TotalSeconds);
 
-            _logger.LogInformation("[Ingestion] {messageRate} msg/sec | Total: {TotalMessages} | Errors: {TotalErrors}",
-                messageRate, _totalMessages, _totalErrors);
+            _logger.LogInformation("[Ingestion] {messageRate} msg/sec | Total: {TotalMessages} | Errors: {TotalErrors} | Dropped: {DroppedMessages}",
+                messageRate, _totalMessages, _totalErrors, _droppedMessages);
         }
     }
 
-    private async Task HandleIncomingMessageAsync(MqttApplicationMessageReceivedEventArgs e)
+    private Task HandleIncomingMessageAsync(MqttApplicationMessageReceivedEventArgs e)
     {
         string topic = e.ApplicationMessage.Topic;
         string payload = System.Text.Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
@@ -96,6 +100,11 @@ public class MqttSubscriberService : BackgroundService
         {
             // Note: Make sure TelemetryPoint is accessible here
             var telemetry = JsonSerializer.Deserialize<TelemetryPoint>(payload);
+            
+            if (!_writer.TryWrite(telemetry!))
+            {
+                Interlocked.Increment(ref _droppedMessages);
+            }
 
             // Thread-safe increment
             Interlocked.Increment(ref _messageCount);
@@ -106,7 +115,7 @@ public class MqttSubscriberService : BackgroundService
             _logger.LogError(ex, "Error processing message. Topic: {Topic}", topic);
         }
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 }
 

@@ -1,11 +1,20 @@
-5 steps:
+## Phase 2: Complete
 
-  1. Create the Worker Service project — IngestionService using the Worker Service template
-  2. Build the MQTT subscriber — a BackgroundService that connects, subscribes with wildcard topics, and deserializes incoming
-    messages
-  3. Share the TelemetryPoint model — extract it into a SiteSense.Shared class library referenced by both projects
-  4. Add throughput metrics — track and log messages per second to prove you can keep up with 150 msg/sec
-  5. Run end-to-end — both projects running together, with experiments to stress-test
+All 5 steps done:
 
-  The key new concept here is BackgroundService — the .NET pattern for long-running processes. It gives you DI, configuration,
-  logging, and graceful shutdown out of the box, which is why we use it instead of another Console App.
+  1. Created the Worker Service project (IngestionService) ✓
+  2. Built the MQTT subscriber (MqttSubscriberService as BackgroundService) ✓
+  3. Shared the TelemetryPoint model via SiteSense.Shared class library ✓
+  4. Added throughput metrics (msg/sec, total count, error tracking with Interlocked) ✓
+  5. Ran end-to-end — ingestion service keeps up with multiple vehicles ✓
+
+### Code review fixes applied
+- Renamed config class from MqttClientOptions to avoid collision with MQTTnet type
+- Added `using var` on IMqttClient for proper disposal
+- Fixed structured logging in error handler
+- Made message handler non-async (returns Task.CompletedTask)
+
+### Known limitation
+- VehicleSimulator: Windows timer resolution caps single-vehicle rate at ~64 msg/sec
+- Workaround: use multiple vehicles to reach target aggregate throughput
+- Simulator uses 100ms sleep with catch-up burst pattern (accurate aggregate rate, bursty delivery)

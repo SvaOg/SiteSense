@@ -1,28 +1,14 @@
-## Step 4: Add Throughput Metrics.
+## Phase 3: Channel-Based Decoupling
 
-We need to prove the ingestion service can keep up with 150 msg/sec. Right now you're logging messages, but you need structured throughput tracking.
+Add a `Channel<TelemetryPoint>` between the MQTT subscriber and a processing pipeline. This decouples "receiving fast" from "processing at your own pace" — the key to handling backpressure.
 
-### What to do
+### Key concept
+Right now the MQTT handler deserializes and discards. In Phase 3, it will write to a Channel, and a separate BackgroundService will read from that Channel and process messages. This is the Producer-Consumer pattern using System.Threading.Channels.
 
-In your message handler, add:
+### Why this matters
+- The MQTT callback must return quickly — if it blocks, the broker's message queue backs up
+- Database writes (Phase 4) will be slower than message arrival
+- The Channel acts as an in-memory buffer, letting the receiver stay fast while the processor works at its own pace
+- Bounded channels add backpressure — if the buffer fills, the producer slows down rather than consuming unlimited memory
 
-  1. A counter (int or long) that increments on every message received
-  2. A Stopwatch (or track DateTime.UtcNow) to measure elapsed time
-  3. Every second, log the rate and reset the counter. Something like:
-    [Ingestion] 152 msg/sec | Total: 4,560
-  3. You can check elapsed time inside the message handler itself — if more than 1 second has passed since last log, print and
-    reset. Or use a separate PeriodicTimer in ExecuteAsync.
-  4. Track deserialization failures separately. Wrap your JsonSerializer.Deserialize in a try/catch — if it fails, increment a
-    failure counter and log the error, but don't crash. Log something like:
-    [Ingestion] Deserialization error (total failures: 3): ...
-
-  The key idea: measure before you optimize. Before adding Channels or database writes in later phases, you want a baseline number
-  proving the receiver alone can handle the load.
-
-  After that — Step 5: Run End-to-End
-
-  Once metrics are in, run both projects together and verify you see ~150 msg/sec in the logs. Then try some experiments:
-
-  - Add a third vehicle in the simulator's appsettings.json at 100Hz — can it handle 250 msg/sec?
-  - Stop the simulator — does the service stay healthy?
-  - Stop and restart the broker — does the service recover?
+### See Phase 3 doc (Docs/Phase2.md or upcoming Phase3.md) for detailed steps.
