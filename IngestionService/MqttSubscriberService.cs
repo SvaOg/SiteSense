@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace IngestionService;
 
-internal class MqttClientOptions
+internal class MqttBrokerOptions
 {
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 1883;
@@ -16,7 +16,11 @@ public class MqttSubscriberService : BackgroundService
 {
     private readonly ILogger<MqttSubscriberService> _logger;
     private readonly IConfiguration _config;
-    private int _count = 0;
+    
+    private long _messageCount = 0;
+    private long _totalMessages = 0;
+    private long _totalErrors = 0;
+    private DateTime _lastTimestamp = DateTime.UtcNow;
 
     public MqttSubscriberService(ILogger<MqttSubscriberService> logger, IConfiguration config)
     {
@@ -26,27 +30,13 @@ public class MqttSubscriberService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var mqttOptions = _config.GetSection("Mqtt").Get<MqttClientOptions>() ?? new MqttClientOptions();
-        
+        var mqttOptions = _config.GetSection("Mqtt").Get<MqttBrokerOptions>() ?? new MqttBrokerOptions();
+
         var mqttFactory = new MqttFactory();
-        var mqttClient = mqttFactory.CreateMqttClient();
+        using var mqttClient = mqttFactory.CreateMqttClient();
 
         // In your Consumer/Worker Service
-        mqttClient.ApplicationMessageReceivedAsync += async e =>
-        {
-            string topic = e.ApplicationMessage.Topic;
-            string payload = System.Text.Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
-            
-            var telemetry = JsonSerializer.Deserialize<TelemetryPoint>(payload);
-
-            if (_count++ > 100)
-            { 
-                _logger.LogInformation($"Received on {topic}: {payload}");
-                _count = 0;
-            }
-
-            await Task.CompletedTask;
-        };
+        mqttClient.ApplicationMessageReceivedAsync += HandleIncomingMessageAsync;
 
         var clientOptions = new MqttClientOptionsBuilder()
             .WithTcpServer(mqttOptions.Host, mqttOptions.Port)
@@ -76,16 +66,47 @@ public class MqttSubscriberService : BackgroundService
         // 4. Send the specific subscribe packet to the broker
         await mqttClient.SubscribeAsync(subscribeOptions, CancellationToken.None);
 
-        Console.WriteLine("Subscribed to all topics successfully.");
-        
+        _logger.LogInformation("Subscribed to all topics successfully.");
+
+        _lastTimestamp = DateTime.UtcNow;
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await Task.Delay(millisecondsDelay: 1000, cancellationToken: stoppingToken);
+
+            var currentTimestamp = DateTime.UtcNow;
+            var duration = currentTimestamp - _lastTimestamp;
+            _lastTimestamp = currentTimestamp;
+
+            long currentCount = Interlocked.Exchange(ref _messageCount, 0);
+            _totalMessages += currentCount;
+            long messageRate = (long)(currentCount / duration.TotalSeconds);
+
+            _logger.LogInformation("[Ingestion] {messageRate} msg/sec | Total: {TotalMessages} | Errors: {TotalErrors}",
+                messageRate, _totalMessages, _totalErrors);
+        }
+    }
+
+    private async Task HandleIncomingMessageAsync(MqttApplicationMessageReceivedEventArgs e)
+    {
+        string topic = e.ApplicationMessage.Topic;
+        string payload = System.Text.Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
+
         try
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
+            // Note: Make sure TelemetryPoint is accessible here
+            var telemetry = JsonSerializer.Deserialize<TelemetryPoint>(payload);
+
+            // Thread-safe increment
+            Interlocked.Increment(ref _messageCount);
         }
-        catch (TaskCanceledException)
+        catch (Exception ex)
         {
-            // Graceful shutdown logic happens here (optional)
+            Interlocked.Increment(ref _totalErrors);
+            _logger.LogError(ex, "Error processing message. Topic: {Topic}", topic);
         }
 
+        await Task.CompletedTask;
     }
 }
+

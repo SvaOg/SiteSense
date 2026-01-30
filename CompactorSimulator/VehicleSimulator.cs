@@ -1,6 +1,7 @@
 ﻿using MQTTnet;
 using MQTTnet.Client;
 using System.Text.Json;
+using System.Diagnostics;
 using SiteSense.Shared.Models;
 
 namespace CompactorSimulator;
@@ -39,63 +40,72 @@ internal class VehicleSimulator
 
     public async Task RunAsync(CancellationToken token)
     {
-        // Calculate delay in milliseconds (e.g., 50Hz = 20ms)
-        int delayMs = 1000 / _config.PublishRateHz;
-
         Console.WriteLine($"[Vehicle {_config.VehicleId}] Engine started. Publishing at {_config.PublishRateHz} Hz.");
 
-        int messageCount = 0;
+        long processedMessages = 0;
+        var stopwatch = Stopwatch.StartNew();
+
         while (!token.IsCancellationRequested)
         {
-            // 1. Update Simulation State (Move the vehicle)
-            UpdatePosition();
+            await Task.Delay(100, token);
 
-            // 2. Generate Telemetry Point
-            var telemetry = new TelemetryPoint
+            long shouldHaveProcessed = (stopwatch.ElapsedMilliseconds * _config.PublishRateHz) / 1000;
+            while (processedMessages < shouldHaveProcessed)
             {
-                VehicleId = _config.VehicleId,
-                Timestamp = DateTime.UtcNow,
-                SiteId = _siteId,
-                Latitude = _currentLat,
-                Longitude = _currentLon,
-                Elevation = _currentElevation + (_random.NextDouble() * 0.1), // Slight sensor noise
-                VibrationFrequency = _random.NextDouble() * 20 + 25, // 25-45 Hz
-                CompactionValue = _random.NextDouble() * 70 + 30, // 30-100%
-                Speed = _random.NextDouble() * 6 + 2 // 2 - 8 km/h
-            };
-
-            // 3. Serialize to JSON
-            string jsonPayload = JsonSerializer.Serialize(telemetry);
-
-            // 4. Construct MQTT Message
-            // Topic: site/{siteId}/vehicle/{vehicleId}/telemetry
-            string topic = $"site/{_siteId}/vehicle/{_config.VehicleId}/telemetry";
-
-            var message = new MqttApplicationMessageBuilder()
-                .WithTopic(topic)
-                .WithPayload(jsonPayload)
-                .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce) // QoS 0 is typical for high-freq telemetry
-                .Build();
-
-            try
-            {
-                // 5. Publish
-                await _mqttClient.PublishAsync(message, token);
+                await PublishTelemetryAsync(token);
+                
+                processedMessages++;
 
                 // Optional: Console log every 100th message just to prove it's alive without spamming
-                if (messageCount++ == 100)
+                if (processedMessages % 100 == 0)
                 {
-                    messageCount = 0;
-                    Console.WriteLine($"[Vehicle {_config.VehicleId}] -> Sent: {jsonPayload}");
+                    Console.WriteLine($"[Vehicle {_config.VehicleId}] -> Sent: {processedMessages} messages");
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[Vehicle {_config.VehicleId}] Failed to publish: {ex.Message}");
-            }
 
-            // 6. Wait for next tick
-            await Task.Delay(delayMs, token);
+            }
+        }
+    }
+
+    private async Task PublishTelemetryAsync(CancellationToken token)
+    {
+        // 1. Update Simulation State (Move the vehicle)
+        UpdatePosition();
+
+        // 2. Generate Telemetry Point
+        var telemetry = new TelemetryPoint
+        {
+            VehicleId = _config.VehicleId,
+            Timestamp = DateTime.UtcNow,
+            SiteId = _siteId,
+            Latitude = _currentLat,
+            Longitude = _currentLon,
+            Elevation = _currentElevation + (_random.NextDouble() * 0.1), // Slight sensor noise
+            VibrationFrequency = _random.NextDouble() * 20 + 25, // 25-45 Hz
+            CompactionValue = _random.NextDouble() * 70 + 30, // 30-100%
+            Speed = _random.NextDouble() * 6 + 2 // 2 - 8 km/h
+        };
+
+        // 3. Serialize to JSON
+        string jsonPayload = JsonSerializer.Serialize(telemetry);
+
+        // 4. Construct MQTT Message
+        // Topic: site/{siteId}/vehicle/{vehicleId}/telemetry
+        string topic = $"site/{_siteId}/vehicle/{_config.VehicleId}/telemetry";
+
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(jsonPayload)
+            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce) // QoS 0 is typical for high-freq telemetry
+            .Build();
+
+        // 5. Publish
+        try
+        {
+            await _mqttClient.PublishAsync(message, token);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Vehicle {_config.VehicleId}] Failed to publish: {ex.Message}");
         }
     }
 
