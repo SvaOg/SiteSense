@@ -6,3 +6,18 @@ services:
             - "1883:1883"
         volumes:
             - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+    sqlserver:
+            image: mcr.microsoft.com/mssql/server:2022-latest
+            container_name: sitesense-sqlserver
+            environment:
+                - ACCEPT_EULA=${ACCEPT_EULA}
+                - MSSQL_SA_PASSWORD=${SQL_PASSWORD}
+                - MSSQL_PID=${MSSQL_PID}
+            ports:
+                - "1433:1433"
+            volumes:
+                - sql-data:/var/opt/mssql # Persists your DB files
+
+volumes:
+    sql-data: # This creates a named volume managed by Docker
