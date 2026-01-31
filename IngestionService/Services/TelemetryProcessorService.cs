@@ -1,4 +1,5 @@
-﻿using System.Threading.Channels;
+﻿using System.Diagnostics;
+using System.Threading.Channels;
 using IngestionService.Data;
 using SiteSense.Shared.Models;
 
@@ -41,13 +42,25 @@ internal class TelemetryProcessorService: BackgroundService
             
             if (batch.Count >= 500 || (batch.Count > 0 && timeoutsCts.IsCancellationRequested))
             {
-                await _batchWriter.WriteBatchAsync(batch, stoppingToken);
-                
-                _logger.LogInformation("[Processor] Flushed batch of {BatchSize} to SQL | Queue depth: {QueueDepth}",
-                    batch.Count, _reader.Count);
-                
-                batch.Clear();
-            }
+                try
+                {
+                    var sw = Stopwatch.StartNew();
+
+                    await _batchWriter.WriteBatchAsync(batch, stoppingToken);
+
+                    sw.Stop();
+
+                    _logger.LogInformation("[Processor] Batch of {BatchSize} written in {Elapsed} ms | Queue depth: {QueueDepth}",
+                        batch.Count, sw.ElapsedMilliseconds, _reader.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to write batch of {Count} to SQL", batch.Count);
+                }
+                finally
+                {
+                    batch.Clear();
+                }
         }
     }
 }
