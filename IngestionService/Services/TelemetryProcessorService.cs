@@ -39,7 +39,7 @@ internal class TelemetryProcessorService: BackgroundService
             {
                 // Timeout - not a shutdown, just no data for 1 second
             }
-            
+
             if (batch.Count >= 500 || (batch.Count > 0 && timeoutsCts.IsCancellationRequested))
             {
                 try
@@ -61,6 +61,7 @@ internal class TelemetryProcessorService: BackgroundService
                 {
                     batch.Clear();
                 }
+            }
         }
     }
 }

@@ -5,8 +5,8 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Exceptions;
 
-
 namespace CompactorSimulator;
+
 internal class Program
 {
     private static async Task Main(string[] args)
@@ -19,11 +19,10 @@ internal class Program
         var mqttHost = config["Mqtt:Host"]; // reads from appsettings.json or environment variables
         var mqttPort = config.GetValue<int>("Mqtt:Port");
 
-        Console.WriteLine($"MQTT Broker: {mqttHost}:{mqttPort}");
-
         var simulationConfig = new SimulationConfig();
         config.GetSection("Simulation").Bind(simulationConfig);
 
+        Console.WriteLine($"MQTT Broker: {mqttHost}:{mqttPort}");
         Console.WriteLine($"Site ID: {simulationConfig.SiteId}");
 
         // 3. Create and connect a single MqttClient using MqttFactory
